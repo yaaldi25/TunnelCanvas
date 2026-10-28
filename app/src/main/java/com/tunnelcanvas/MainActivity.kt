@@ -1,22 +1,11 @@
 package com.tunnelcanvas
 
 import android.content.ContentResolver
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
-import android.graphics.Canvas
-import android.net.Uri
 import android.os.Bundle
-import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,12 +25,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Image as ImageIcon
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -57,7 +44,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -71,14 +57,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
 
 private val Ink = Color(0xFF09070F)
 private val Panel = Color(0xFF171222)
@@ -112,8 +95,6 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
     var server by rememberSaveable { mutableStateOf("example.com") }
     var port by rememberSaveable { mutableStateOf("443") }
     var note by rememberSaveable { mutableStateOf("") }
-    var imageBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var grayscale by rememberSaveable { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Ready to configure") }
     var importedConfig by remember { mutableStateOf("") }
     val profiles = remember {
@@ -122,13 +103,6 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
         )
     }
 
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            imageBitmap = decodeBitmap(contentResolver, uri)
-            grayscale = false
-            statusMessage = if (imageBitmap != null) "Image loaded" else "Could not decode image"
-        }
-    }
     val configPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -142,12 +116,6 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
                 protocol = connection?.optString("protocol", "trojan") ?: "trojan"
                 server = connection?.optString("server", "") ?: ""
                 port = connection?.optInt("port", 443)?.toString() ?: "443"
-                val cover = metadata?.optJSONObject("cover")
-                val encoded = cover?.optString("data", "").orEmpty()
-                if (encoded.isNotBlank()) {
-                    imageBitmap = decodeBase64Image(encoded)
-                    grayscale = false
-                }
                 statusMessage = "Configuration imported"
             } catch (e: Exception) {
                 statusMessage = "Import failed: expected TunnelCanvas JSON profile"
@@ -159,7 +127,7 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                val json = buildConfigJson(profileName, protocol, server, port, note, imageBitmap, grayscale)
+                val json = buildConfigJson(profileName, protocol, server, port, note)
                 contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
                 statusMessage = "Configuration exported"
             } catch (e: Exception) {
@@ -193,12 +161,6 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
                         icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
                         label = { Text("Profiles") }
                     )
-                    NavigationBarItem(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        icon = { Icon(Icons.Default.Brush, contentDescription = null) },
-                        label = { Text("Image Lab") }
-                    )
                 }
             }
         ) { padding ->
@@ -215,8 +177,7 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
                         port = port,
                         onImport = { configPicker.launch(arrayOf("application/json", "text/*", "*/*")) },
                         onExport = { exportLauncher.launch(safeFileName(profileName) + ".json") },
-                        onOpenProfiles = { selectedTab = 1 },
-                        onOpenEditor = { selectedTab = 2 }
+                        onOpenProfiles = { selectedTab = 1 }
                     )
                     1 -> ProfilesScreen(
                         profiles = profiles,
@@ -245,15 +206,6 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
                             statusMessage = "Selected ${it.name}"
                         },
                         onDelete = { profiles.remove(it) }
-                    )
-                    else -> ImageLab(
-                        bitmap = imageBitmap,
-                        grayscale = grayscale,
-                        statusMessage = statusMessage,
-                        onPickImage = { imagePicker.launch("image/*") },
-                        onToggleGrayscale = { grayscale = it },
-                        onExport = { exportLauncher.launch(safeFileName(profileName) + ".json") },
-                        onClear = { imageBitmap = null; grayscale = false; statusMessage = "Image cleared" }
                     )
                 }
             }
@@ -293,8 +245,7 @@ private fun Dashboard(
     port: String,
     onImport: () -> Unit,
     onExport: () -> Unit,
-    onOpenProfiles: () -> Unit,
-    onOpenEditor: () -> Unit
+    onOpenProfiles: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -303,7 +254,7 @@ private fun Dashboard(
     ) {
         item {
             Text("Your workspace", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Manage profiles and embedded image assets.", color = Muted)
+            Text("Manage your connection profiles and configuration files.", color = Muted)
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(24.dp)) {
@@ -346,14 +297,6 @@ private fun Dashboard(
                 subtitle = "Edit server metadata and keep profiles in this session.",
                 icon = { Icon(Icons.Default.FolderOpen, null, tint = Purple) },
                 onClick = onOpenProfiles
-            )
-        }
-        item {
-            FeatureCard(
-                title = "Embedded Image Lab",
-                subtitle = "Load an image, preview it, apply grayscale, then export it inside a profile.",
-                icon = { Icon(Icons.Default.ImageIcon, null, tint = Purple) },
-                onClick = onOpenEditor
             )
         }
     }
@@ -453,130 +396,16 @@ private fun ProfilesScreen(
     }
 }
 
-@Composable
-private fun ImageLab(
-    bitmap: Bitmap?,
-    grayscale: Boolean,
-    statusMessage: String,
-    onPickImage: () -> Unit,
-    onToggleGrayscale: (Boolean) -> Unit,
-    onExport: () -> Unit,
-    onClear: () -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Text("Embedded Image Lab", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Edit an image asset and embed it in a TunnelCanvas JSON profile.", color = Muted)
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (bitmap != null) {
-                        val preview = remember(bitmap, grayscale) {
-                            if (grayscale) applyGrayscale(bitmap) else bitmap
-                        }
-                        Image(
-                            bitmap = preview.asImageBitmap(),
-                            contentDescription = "Image preview",
-                            modifier = Modifier.fillMaxWidth().aspectRatio(1.25f).clip(RoundedCornerShape(16.dp)).background(Panel2)
-                        )
-                        Text("${bitmap.width} × ${bitmap.height} px", color = Muted, style = MaterialTheme.typography.bodySmall)
-                    } else {
-                        Box(
-                            Modifier.fillMaxWidth().aspectRatio(1.25f).clip(RoundedCornerShape(16.dp)).background(Panel2)
-                                .border(1.dp, Purple.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Default.ImageIcon, contentDescription = null, tint = Purple, modifier = Modifier.size(42.dp))
-                                Text("No image selected", color = Muted)
-                            }
-                        }
-                    }
-                    Button(onClick = onPickImage, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Purple)) {
-                        Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose image")
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Grayscale filter", fontWeight = FontWeight.SemiBold)
-                            Text("Applied when exporting the profile", color = Muted, style = MaterialTheme.typography.bodySmall)
-                        }
-                        Switch(checked = grayscale, onCheckedChange = onToggleGrayscale, enabled = bitmap != null)
-                    }
-                    OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth(), enabled = bitmap != null) {
-                        Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("Export profile with image")
-                    }
-                    OutlinedButton(onClick = onClear, modifier = Modifier.fillMaxWidth(), enabled = bitmap != null) {
-                        Icon(Icons.Default.Delete, null); Spacer(Modifier.width(8.dp)); Text("Remove image")
-                    }
-                    Text(statusMessage, color = Lavender, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        item {
-            Text("Supported in this starter", fontWeight = FontWeight.Bold)
-            Text("PNG/JPEG decoding through Android BitmapFactory; PNG output embedded as Base64 in the profile's metadata.cover field.", color = Muted)
-            Text("Not included yet: crop UI, YAML import, arbitrary third-party tunnel formats, or VPN connections.", color = Muted)
-        }
-    }
-}
-
-private fun decodeBitmap(resolver: ContentResolver, uri: Uri): Bitmap? {
-    return try {
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private fun decodeBase64Image(encoded: String): Bitmap? {
-    return try {
-        val bytes = Base64.decode(encoded, Base64.DEFAULT)
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private fun applyGrayscale(source: Bitmap): Bitmap {
-    val output = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(output)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    val matrix = ColorMatrix().apply { setSaturation(0f) }
-    paint.colorFilter = ColorMatrixColorFilter(matrix)
-    canvas.drawBitmap(source, 0f, 0f, paint)
-    return output
-}
-
 private fun buildConfigJson(
     name: String,
     protocol: String,
     server: String,
     port: String,
-    note: String,
-    bitmap: Bitmap?,
-    grayscale: Boolean
+    note: String
 ): String {
     val metadata = JSONObject()
         .put("name", name.ifBlank { "Untitled profile" })
         .put("note", note)
-    if (bitmap != null) {
-        val imageToEncode = if (grayscale) applyGrayscale(bitmap) else bitmap
-        val output = ByteArrayOutputStream()
-        imageToEncode.compress(Bitmap.CompressFormat.PNG, 100, output)
-        val base64 = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
-        metadata.put(
-            "cover",
-            JSONObject()
-                .put("mediaType", "image/png")
-                .put("encoding", "base64")
-                .put("data", base64)
-        )
-    }
     val connection = JSONObject()
         .put("protocol", protocol.trim().ifBlank { "trojan" })
         .put("server", server.trim())
