@@ -33,9 +33,12 @@ jobs:
 
       
       - name: Build debug APK
+        working-directory: .
         run: |
-          chmod +x gradlew 2>/dev/null || true
-          ./gradlew assembleDebug --stacktrace --info
+          ls -la
+          find . -maxdepth 3 -name gradlew -type f
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
