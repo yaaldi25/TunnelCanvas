@@ -31,14 +31,14 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
-      
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper
+
+      - name: Check Gradle
+        run: gradle --version
+
       - name: Build debug APK
-        working-directory: .
-        run: |
-          ls -la
-          find . -maxdepth 3 -name gradlew -type f
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
