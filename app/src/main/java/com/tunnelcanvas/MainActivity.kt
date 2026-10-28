@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -105,36 +106,41 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
     }
 
     val configPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                contentResolver.openInputStream(uri)?.use { input ->
-                    importedConfig = input.bufferedReader().readText()
-                }
-                val json = JSONObject(importedConfig)
-                val metadata = json.optJSONObject("metadata")
-                val connection = json.optJSONObject("connection")
-                profileName = metadata?.optString("name", "Imported profile") ?: "Imported profile"
-                protocol = connection?.optString("protocol", "trojan") ?: "trojan"
-                server = connection?.optString("server", "") ?: ""
-                port = connection?.optInt("port", 443)?.toString() ?: "443"
-                statusMessage = "Configuration imported"
-            } catch (e: Exception) {
-                statusMessage = "Import failed: expected TunnelCanvas JSON profile"
+    val configPicker = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument()
+) { uri: Uri? ->
+    if (uri != null) {
+        try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                importedConfig = input.bufferedReader().readText()
             }
+            val json = JSONObject(importedConfig)
+            val metadata = json.optJSONObject("metadata")
+            val connection = json.optJSONObject("connection")
+            profileName = metadata?.optString("name", "Imported profile") ?: "Imported profile"
+            protocol = connection?.optString("protocol", "trojan") ?: "trojan"
+            server = connection?.optString("server", "") ?: ""
+            port = connection?.optInt("port", 443)?.toString() ?: "443"
+            statusMessage = "Configuration imported"
+        } catch (e: Exception) {
+            statusMessage = "Import failed: expected TunnelCanvas JSON profile"
         }
     }
+    }
     val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                val json = buildConfigJson(profileName, protocol, server, port, note)
-                contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-                statusMessage = "Configuration exported"
-            } catch (e: Exception) {
-                statusMessage = "Export failed: ${e.message ?: "unknown error"}"
+    contract = ActivityResultContracts.CreateDocument("application/json")
+) { uri: Uri? ->
+    if (uri != null) {
+        try {
+            val json = buildConfigJson(profileName, protocol, server, port, note)
+            contentResolver.openOutputStream(uri)?.use {
+                it.write(json.toByteArray(Charsets.UTF_8))
             }
+            statusMessage = "Configuration exported"
+        } catch (e: Exception) {
+            statusMessage = "Export failed: ${e.message ?: "unknown error"}"
         }
+    }
     }
 
     MaterialTheme(colorScheme = darkColorScheme(
