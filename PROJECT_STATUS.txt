@@ -1,0 +1,3 @@
+TunnelCanvas source starter generated.
+No APK has been built or runtime-tested in this environment.
+Before production: add persistent storage, size limits, crop controls, robust parser handling, and tunnel engine integration.
