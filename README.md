@@ -52,28 +52,3 @@ The APK is not included in this source archive; it must be built locally.
 6. Re-import that JSON from Home or Profiles. Verify name/server/port and image are restored.
 7. Try importing an unrelated JSON file; the app should show the expected-format error.
 8. Test a large image and malformed input before expanding the app; production builds should add size limits and better error handling.
-
-## JSON profile format
-
-```json
-{
-  "format": "tunnelcanvas-profile",
-  "version": 1,
-  "metadata": {
-    "name": "My Profile",
-    "note": "",
-    "cover": {
-      "mediaType": "image/png",
-      "encoding": "base64",
-      "data": "<BASE64_IMAGE_DATA>"
-    }
-  },
-  "connection": {
-    "protocol": "trojan",
-    "server": "example.com",
-    "port": 443
-  }
-}
-```
-
-Do not put real credentials in example profiles or share exported profiles publicly if they contain secrets.
