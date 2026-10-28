@@ -105,7 +105,6 @@ private fun TunnelCanvasApp(contentResolver: ContentResolver) {
         )
     }
 
-    val configPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
     val configPicker = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.OpenDocument()
 ) { uri: Uri? ->
